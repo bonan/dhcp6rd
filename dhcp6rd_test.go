@@ -24,6 +24,10 @@ func TestMarshalDhclient(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if opt.Prefix.String() != "2001:2002::" {
+		t.Fail()
+	}
+
 	if net.String() != "2001:2002:d471:417b::/64" {
 		t.Fail()
 	}

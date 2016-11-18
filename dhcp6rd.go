@@ -24,7 +24,8 @@ func (o *Option6RD) IPNet(ip net.IP) (*net.IPNet, error) {
 	}
 
 	ip6mask := net.CIDRMask(o.PrefixLen, 128)
-	ip6 := o.Prefix
+	ip6 := make(net.IP, 16)
+	copy(ip6, o.Prefix)
 
 	// Ignore non-zero values in host part of prefix
 	for i, v := range ip6 {
