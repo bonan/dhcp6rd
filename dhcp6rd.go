@@ -1,3 +1,4 @@
+// Package dhcp6rd provides utils for decoding the dhcp 6rd option (option 212)
 package dhcp6rd
 
 import (
@@ -15,7 +16,8 @@ type Option6RD struct {
 	Relay     []net.IP
 }
 
-// IPNet returns the 6rd-prefix that should be used for argument ip
+// IPNet returns the usable 6rd-prefix based on your current IPv4 address
+// which is provided as an argument to the function.
 func (o *Option6RD) IPNet(ip net.IP) (*net.IPNet, error) {
 	// Make sure that the argument is a valid IPv4 address
 	ip4 := ip.To4()
@@ -62,24 +64,6 @@ func (o *Option6RD) Marshal() []byte {
 	return ret
 }
 
-// MarshalDhclient returns the 6RD DHCP Option in dhclient-format
-func (o *Option6RD) MarshalDhclient() string {
-	str := strconv.Itoa(o.MaskLen) + " " +
-		strconv.Itoa(o.PrefixLen) + " " +
-		strconv.Itoa(int(o.Prefix[0])<<8+int(o.Prefix[1])) + " " +
-		strconv.Itoa(int(o.Prefix[2])<<8+int(o.Prefix[3])) + " " +
-		strconv.Itoa(int(o.Prefix[4])<<8+int(o.Prefix[5])) + " " +
-		strconv.Itoa(int(o.Prefix[6])<<8+int(o.Prefix[7])) + " " +
-		strconv.Itoa(int(o.Prefix[8])<<8+int(o.Prefix[9])) + " " +
-		strconv.Itoa(int(o.Prefix[10])<<8+int(o.Prefix[11])) + " " +
-		strconv.Itoa(int(o.Prefix[12])<<8+int(o.Prefix[13])) + " " +
-		strconv.Itoa(int(o.Prefix[14])<<8+int(o.Prefix[15]))
-	for _, v := range o.Relay {
-		str = str + " " + v.String()
-	}
-	return str
-}
-
 // Unmarshal parses the raw 6RD DHCP Option and returns a Option6RD struct
 func Unmarshal(b []byte) (*Option6RD, error) {
 	if len(b) < 18 {
@@ -99,13 +83,23 @@ func Unmarshal(b []byte) (*Option6RD, error) {
 	return o, nil
 }
 
-// UnmarshalDhclient parses the 6RD DHCP Option (from dhclient format) and returns a Option6RD struct
+// UnmarshalDhclient parses the string-formatted 6RD DHCP Option and returns a Option6RD struct
+// The formats from dhclient that's supported are:
+//
+// option option-6rd code 212 = { integer 8, integer 8, integer 16, integer 16,
+//      integer 16, integer 16, integer 16, integer 16, integer 16, integer 16,
+//      array of ip-address
+// };
+//
+// or:
+//
+// option option-6rd code 212 = { integer 8, integer 8, ip6-address, array of ip-address };
 func UnmarshalDhclient(s string) (*Option6RD, error) {
 	parts := strings.Split(s, " ")
-	if len(parts) < 10 {
+	if len(parts) < 4 {
 		return nil, errors.New("Unable to parse 6RD Option (not enough parameters)")
 	}
-	b := make([]byte, 18)
+	b := make([]byte, 2)
 
 	maskLen, err := strconv.Atoi(parts[0])
 	if err != nil {
@@ -118,15 +112,29 @@ func UnmarshalDhclient(s string) (*Option6RD, error) {
 	}
 	b[0] = byte(maskLen)
 	b[1] = byte(prefixLen)
-	for i := 0; i < 8; i++ {
-		p, err := strconv.Atoi(parts[i+2])
-		if err != nil {
-			return nil, err
+
+	var relayStart int
+	ip6prefix := make(net.IP, 16)
+
+	if strings.Contains(parts[2], ":") {
+		relayStart = 3
+		ip6prefix = net.ParseIP(parts[2])
+	} else {
+		if len(parts) < 10 {
+			return nil, errors.New("Unable to parse 6RD Option (not enough parameters)")
 		}
-		b[2+i*2] = byte((p >> 8) & 0xff)
-		b[3+i*2] = byte(p & 0xff)
+		for i := 0; i < 8; i++ {
+			p, err := strconv.Atoi(parts[i+2])
+			if err != nil {
+				return nil, err
+			}
+			ip6prefix[i*2] = byte((p >> 8) & 0xff)
+			ip6prefix[1+i*2] = byte(p & 0xff)
+		}
+		relayStart = 10
 	}
-	for i := 10; i < len(parts); i++ {
+	b = append(b, ip6prefix...)
+	for i := relayStart; i < len(parts); i++ {
 		ip := net.ParseIP(parts[i])
 		b = append(b, ip.To4()...)
 	}

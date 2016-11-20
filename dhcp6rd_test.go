@@ -14,8 +14,31 @@ func TestMarshalDhclient(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if opt.MarshalDhclient() != b {
+	addr := net.ParseIP("212.113.65.123")
+	net, err := opt.IPNet(addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if opt.Prefix.String() != "2001:2002::" {
 		t.Fail()
+	}
+
+	if net.String() != "2001:2002:d471:417b::/64" {
+		t.Fail()
+	}
+
+	if ones, size := net.Mask.Size(); ones != 64 || size != 128 {
+		t.Fail()
+	}
+
+}
+
+func TestMarshalDhclientShort(t *testing.T) {
+	b := "0 32 2001:2002:: 217.209.228.166"
+	opt, err := UnmarshalDhclient(b)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	addr := net.ParseIP("212.113.65.123")
@@ -32,6 +55,9 @@ func TestMarshalDhclient(t *testing.T) {
 		t.Fail()
 	}
 
+	if ones, size := net.Mask.Size(); ones != 64 || size != 128 {
+		t.Fail()
+	}
 }
 
 func TestMarshal(t *testing.T) {
