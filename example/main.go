@@ -1,12 +1,3 @@
-# dhcp6rd
-
-Library for parsing 6rd options from DHCP and calculating which prefix to assign
-
-See [godoc](https://godoc.org/github.com/bonan/dhcp6rd) for full documentation
-
-Example usage:
-
-```go
 package main
 
 import (
@@ -16,7 +7,7 @@ import (
 )
 
 func main() {
-	// Parse option 212 received from dhclient
+	// Parse option 212 received with dhclient
 	opt, err := dhcp6rd.UnmarshalDhclient("0 32 2001:db8:: 192.0.2.1")
 
 	if err != nil {
@@ -33,4 +24,3 @@ func main() {
 	// Log the prefix delegation
 	log.Printf("Usable 6rd prefix: %v\n", net.String())
 }
-```

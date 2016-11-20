@@ -1,4 +1,5 @@
 // Package dhcp6rd provides utils for decoding the dhcp 6rd option (option 212)
+// and calculating what prefix is usable based on the current IPv4 address
 package dhcp6rd
 
 import (
@@ -10,14 +11,21 @@ import (
 
 // Option6RD contains the parsed values for the 6RD DHCP Option
 type Option6RD struct {
-	MaskLen   int
-	Prefix    net.IP
+	// MaskLen is the number of bits that should be discarded
+	// from the beginning of the IPv4 address when calculating
+	// what 6rd prefix to use
+	MaskLen int
+	// Prefix from ISP that's used together with the current IPv4
+	// address to calculate the usable 6rd prefix
+	Prefix net.IP
+	// PrefixLen represents the length of the prefix from the ISP
 	PrefixLen int
-	Relay     []net.IP
+	// Relay is a slice of IP-addresses that can be used as 6rd gateways
+	Relay []net.IP
 }
 
 // IPNet returns the usable 6rd-prefix based on your current IPv4 address
-// which is provided as an argument to the function.
+// (which should be provided as an argument to the function)
 func (o *Option6RD) IPNet(ip net.IP) (*net.IPNet, error) {
 	// Make sure that the argument is a valid IPv4 address
 	ip4 := ip.To4()
@@ -55,6 +63,7 @@ func (o *Option6RD) IPNet(ip net.IP) (*net.IPNet, error) {
 }
 
 // Marshal returns the 6RD DHCP Option in byte format
+// See Unmarshal() documentation for option format
 func (o *Option6RD) Marshal() []byte {
 	ret := []byte{byte(o.MaskLen), byte(o.PrefixLen)}
 	ret = append(ret, o.Prefix...)
@@ -64,7 +73,14 @@ func (o *Option6RD) Marshal() []byte {
 	return ret
 }
 
-// Unmarshal parses the raw 6RD DHCP Option and returns a Option6RD struct
+// Unmarshal parses the raw 6RD DHCP Option as received from the DHCP server
+// (minus option length) and returns a Option6RD struct
+//
+// Input should be a byte-slice with the values:
+// 1 byte mask length (representing number of bits to discard from beginning of IPv4 address)
+// 1 byte prefix length (6rd base prefix length, usually 32)
+// 16 byte IPv6 prefix
+// 4 byte IPv4 relay address (multiple times if there's multiple relays)
 func Unmarshal(b []byte) (*Option6RD, error) {
 	if len(b) < 18 {
 		return nil, errors.New("Unable to parse 6RD DHCP Option (not enough bytes)")
@@ -85,15 +101,17 @@ func Unmarshal(b []byte) (*Option6RD, error) {
 
 // UnmarshalDhclient parses the string-formatted 6RD DHCP Option and returns a Option6RD struct
 // The formats from dhclient that's supported are:
-//
-// option option-6rd code 212 = { integer 8, integer 8, integer 16, integer 16,
-//      integer 16, integer 16, integer 16, integer 16, integer 16, integer 16,
-//      array of ip-address
-// };
-//
-// or:
-//
-// option option-6rd code 212 = { integer 8, integer 8, ip6-address, array of ip-address };
+//   option option-6rd code 212 = {
+//     integer 8, integer 8, integer 16, integer 16, integer 16,
+//     integer 16, integer 16, integer 16, integer 16, integer 16,
+//     array of ip-address
+//   };
+// or
+//   option option-6rd code 212 = {
+//     integer 8, integer 8, ip6-address, array of ip-address
+//   };
+// Internally the function turns the dhclient option string into a raw dhcp option packet and
+// runs it through Unmarshal()
 func UnmarshalDhclient(s string) (*Option6RD, error) {
 	parts := strings.Split(s, " ")
 	if len(parts) < 4 {
